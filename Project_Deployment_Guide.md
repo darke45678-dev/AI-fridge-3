@@ -18,8 +18,8 @@
 
 ### 1. 下載專案
 ```bash
-git clone https://github.com/darke45678-dev/AI_fridge.git
-cd kitchen-ai-main
+git clone https://github.com/darke45678-dev/AI_fridge-2.git
+cd AI_fridge-2
 ```
 
 ### 2. 後端環境設定 (Python API)
