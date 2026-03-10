@@ -22,9 +22,8 @@ app.add_middleware(
 )
 
 # === Configuration ===
-# Placeholder for your YOLOv8 model path (.pt file)
-# Example: r'C:\Users\user\Desktop\spinach.v11i.yolov8\runs\detect\train3\weights\best.pt'
-MODEL_PATH = r'c:\Users\user\Desktop\spinach.v11i.yolov8\runs\detect\train3\weights\best.pt'
+# Local YOLOv8 model path (.pt file)
+MODEL_PATH = 'best.pt'
 
 # Global model variable
 model = None
@@ -70,33 +69,58 @@ async def detect(request: DetectionRequest):
         raise HTTPException(status_code=503, detail="Model not loaded")
 
     try:
-        # Decode Base64 image
+        # --- 圖像解碼與處理 (Image Decoding) ---
         encoded = request.image.split(",", 1)[1] if "," in request.image else request.image
         img_data = base64.b64decode(encoded)
         img = Image.open(io.BytesIO(img_data)).convert("RGB")
         
-        # Run Inference
+        # --- 執行模型辨識 (Run YOLO Inference) ---
         results = detector(img, verbose=False)
         
-        # Extract detections & deduplicate
-        detected_names = set()
+        # --- 解析偵測結果 (Parse Results) ---
+        detections = []
+        width, height = img.size
+        
         for r in results:
             for box in r.boxes:
-                detected_names.add(detector.names[int(box.cls[0])])
+                cls_id = int(box.cls[0])
+                name = detector.names[cls_id] # 取得類別名稱
+                conf = float(box.conf[0]) # 取得信心度 (0~1)
+                xyxy = box.xyxy[0].tolist() # 取得座標 [x1, y1, x2, y2]
+                
+                # --- 品質判定邏輯 (Spoiled Logic) ---
+                # 如果標籤名稱包含 'rotten'，判定為損壞食材
+                is_spoiled = (name.lower() == 'rotten')
+                
+                detections.append({
+                    "name": name,
+                    "confidence": conf,
+                    "box": [
+                        xyxy[0] / width, 
+                        xyxy[1] / height, 
+                        xyxy[2] / width, 
+                        xyxy[3] / height
+                    ],
+                    "isSpoiled": is_spoiled,
+                    # 分類邏輯：若是菠菜則分類為蔬菜，其餘預設為其他
+                    "category": "蔬菜" if "spinach" in name.lower() else "其他"
+                })
         
-        # Build Response
-        detections = [{"name": name} for name in detected_names]
+        # Build Summary
+        bad_count = sum(1 for d in detections if d["isSpoiled"])
+        good_count = len(detections) - bad_count
         
-        # Get recommended recipes based on detections
+        # Group detections for local DB/recipes logic
+        distinct_names = set(d["name"].lower() for d in detections if not d["isSpoiled"])
         recommended = []
-        for name in detected_names:
-            if name.lower() in RECIPE_DB:
-                recommended.append(RECIPE_DB[name.lower()])
+        for name in distinct_names:
+            if name in RECIPE_DB:
+                recommended.append(RECIPE_DB[name])
 
         return {
             "detections": detections,
             "recipes": recommended,
-            "summary": f"偵測到 {len(detected_names)} 種食材，推薦 {len(recommended)} 個食譜"
+            "summary": f"偵測完成：{good_count} 個良品, {bad_count} 個損壞。{len(recommended)} 個適用食譜已就緒。"
         }
 
     except Exception as e:

@@ -14,8 +14,8 @@ export function BottomNav() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-[100] px-4 pb-6 pt-2 pointer-events-none">
-      <div className="max-w-lg mx-auto bg-[#0f2e24]/80 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-3 flex justify-around items-center shadow-[0_20px_50px_rgba(0,0,0,0.5)] pointer-events-auto">
+    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 z-[100] w-full max-w-[430px] px-4 pb-6 pt-2 pointer-events-none">
+      <div className="w-full mx-auto bg-[#0f2e24]/80 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-3 flex justify-around items-center shadow-[0_20px_50px_rgba(0,0,0,0.5)] pointer-events-auto">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));

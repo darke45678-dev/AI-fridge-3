@@ -44,7 +44,12 @@ export function DetectionSummary({ readOnly = false }: { readOnly?: boolean }) {
                                 </div>
                             </div>
 
-                            {!readOnly && (
+                            {readOnly ? (
+                                <div className="flex items-center px-4 py-1.5 bg-[#0f2e24]/80 rounded-full border border-white/10">
+                                    <span className="text-[10px] font-black text-[#00ff88] uppercase tracking-wider mr-2 opacity-50">Count</span>
+                                    <span className="text-xs font-black text-[#00ff88]">{item.quantity}</span>
+                                </div>
+                            ) : (
                                 <div className="flex items-center gap-3">
                                     <div className="flex items-center bg-[#0f2e24]/80 rounded-full p-1 border border-white/10 scale-90">
                                         <button

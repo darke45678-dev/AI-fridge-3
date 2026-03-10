@@ -1,35 +1,28 @@
 /// <reference types="vite/client" />
 import { RefObject, useState } from "react";
-import { Camera, Sparkles, Loader2 } from "lucide-react";
+import { Camera, Loader2, RefreshCw } from "lucide-react";
 import { useIngredients } from "../../services/IngredientContext";
-import { llmService } from "../../services/llmService";
 import { DetectionSummary } from "../inventory_management/DetectionSummary";
-import { useNavigate } from "react-router";
 
 interface CameraViewProps {
     videoRef: RefObject<HTMLVideoElement | null>;
 }
 
 export function CameraView({ videoRef }: CameraViewProps) {
-    const { addItem, setRecipes, scannedItems, selectedIds } = useIngredients();
-    const navigate = useNavigate();
-    const [isScanning, setIsScanning] = useState(false);
-    const [isGenerating, setIsGenerating] = useState(false);
-    const [showFrames, setShowFrames] = useState(false);
+    const { addItem, scannedItems, tempDetections, clearTempDetections } = useIngredients();
+    const [isScanning, setIsScanning] = useState(false); // 是否正在進行 AI 掃描
+    const [showFrames, setShowFrames] = useState(false); // 是否顯示 AI 識別框
+    const [currentBoxes, setCurrentBoxes] = useState<any[]>([]); // 存放當前畫面偵測到的物體座標與資訊
 
     const handleScan = async () => {
         if (!videoRef.current) return;
         setIsScanning(true);
         setShowFrames(false);
+        setCurrentBoxes([]); // 開始新掃描前先清空舊的識別框
 
-        // 模擬延遲感，增加 AI 運算的真實體感 (1.5s)
+        // --- 手動調整參數：模擬延遲感 (毫秒) ---
+        // 增加 AI 運算的真實體感預留時間
         await new Promise(resolve => setTimeout(resolve, 1500));
-
-        // 模擬辨識邏輯：即使 API 失敗也能進行功能測試
-        const simulatedDetections = [
-            { name: "番茄", category: "蔬菜" },
-            { name: "菠菜", category: "蔬菜" }
-        ];
 
         try {
             const canvas = document.createElement("canvas");
@@ -49,50 +42,34 @@ export function CameraView({ videoRef }: CameraViewProps) {
 
                 const data = await response.json();
                 if (data.detections?.length > 0) {
-                    data.detections.forEach((det: any) => addItem({
+                    // --- 手動調整參數：AI 信心度過濾門檻 (0.0 ~ 1.0) ---
+                    // 數值越高越精準，但太高會掃不到東西；數值越低越靈敏，但容易有幽靈辨識
+                    const CONFIDENCE_THRESHOLD = 0.2;
+
+                    const validDetections = data.detections.filter((det: any) => (det.confidence || 0) > CONFIDENCE_THRESHOLD);
+
+                    setCurrentBoxes(validDetections);
+                    validDetections.forEach((det: any) => addItem({
                         name: det.name,
                         quantity: 1,
-                        category: det.category || "其他"
+                        category: det.category || "其他",
+                        confidence: det.confidence,
+                        isSpoiled: det.isSpoiled,
+                        box: det.box
                     }));
-                } else {
-                    // 如果 API 沒辨識到，執行模擬數據
-                    simulatedDetections.forEach(item => addItem({ ...item, quantity: 1 }));
                 }
             }
         } catch (error) {
-            console.warn("API 辨識失敗，啟動模擬數據:", error);
-            simulatedDetections.forEach(item => addItem({ ...item, quantity: 1 }));
+            console.warn("辨識服務連接失敗:", error);
         } finally {
             setIsScanning(false);
             setShowFrames(true);
         }
     };
 
-    const handleGenerateRecipes = async () => {
-        console.log("觸發食譜合成...", { scannedItems, selectedIds });
-
-        // 僅過濾出被勾選的食材 (Filter only selected ingredients)
-        const selectedIngredients = scannedItems
-            .filter(item => selectedIds.includes(item.id))
-            .map(item => item.name);
-
-        if (selectedIngredients.length === 0) {
-            alert("請至少選擇一項食材進行合成！");
-            return;
-        }
-
-        setIsGenerating(true);
-        try {
-            const recipes = await llmService.generateRecipes({ ingredients: selectedIngredients });
-            console.log("成功獲取食譜:", recipes);
-            setRecipes(recipes);
-            navigate("/recipes");
-        } catch (error) {
-            console.error("生成食譜失敗 (詳細錯誤):", error);
-            alert("連接核心伺服器失敗，請確保後端已啟動。");
-        } finally {
-            setIsGenerating(false);
-        }
+    const handleClear = () => {
+        clearTempDetections();
+        setCurrentBoxes([]);
     };
 
     return (
@@ -116,12 +93,35 @@ export function CameraView({ videoRef }: CameraViewProps) {
                         className="absolute inset-0 w-full h-full object-cover"
                     />
 
+                    {/* Bounding Box Overlay */}
+                    <div className="absolute inset-0 z-10 pointer-events-none">
+                        {currentBoxes.map((boxData, idx) => boxData.box && (
+                            <div
+                                key={`box-${idx}`}
+                                className="absolute"
+                                style={{
+                                    left: `${boxData.box[0] * 100}%`,
+                                    top: `${boxData.box[1] * 100}%`,
+                                    width: `${(boxData.box[2] - boxData.box[0]) * 100}%`,
+                                    height: `${(boxData.box[3] - boxData.box[1]) * 100}%`,
+                                    borderColor: boxData.isSpoiled ? '#ff4d4d' : '#00ff88',
+                                    borderWidth: '2px',
+                                    borderStyle: 'solid',
+                                    borderRadius: '8px'
+                                }}
+                            >
+                                <div className={`absolute -top-6 left-0 px-2 py-0.5 rounded-t-md text-[8px] font-black uppercase whitespace-nowrap ${boxData.isSpoiled ? 'bg-red-500 text-white' : 'bg-[#00ff88] text-[#0f2e24]'}`}>
+                                    {boxData.isSpoiled ? 'BAD' : 'GOOD'} | {boxData.name} | {Math.round((boxData.confidence || 0) * 100)}%
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
                     <div className="absolute inset-0 bg-gradient-to-b from-[#0f2e24]/40 to-transparent pointer-events-none" />
 
                     {isScanning && (
-                        <div className="absolute inset-0 bg-[#00ff88]/5 animate-pulse flex flex-col items-center justify-center">
+                        <div className="absolute inset-0 bg-[#00ff88]/5 flex flex-col items-center justify-center">
                             <div className="w-full h-[2px] bg-amber-400 shadow-[0_0_15px_#fbbf24] absolute top-0 animate-[scan_2s_ease-in-out_infinite]" />
-                            <div className="text-amber-400 text-[10px] font-black tracking-[0.5em] uppercase animate-pulse">Analyzing Pattern</div>
                         </div>
                     )}
 
@@ -132,6 +132,18 @@ export function CameraView({ videoRef }: CameraViewProps) {
                 </div>
             </div>
 
+            {tempDetections.length > 0 && (
+                <div className="w-full flex justify-end px-2 mb-2 mt-4">
+                    <button
+                        onClick={handleClear}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 text-red-500 rounded-lg border border-red-500/20 hover:bg-red-500 hover:text-white transition-all text-[10px] font-black tracking-widest uppercase"
+                    >
+                        <RefreshCw size={12} />
+                        重新整理畫面
+                    </button>
+                </div>
+            )}
+
             {/* 即時辨識清單：放置在相機預覽框下方 */}
             <DetectionSummary readOnly={true} />
 
@@ -139,27 +151,12 @@ export function CameraView({ videoRef }: CameraViewProps) {
             <div className="w-full mt-8 space-y-3 px-2">
                 <button
                     onClick={handleScan}
-                    disabled={isScanning || isGenerating}
+                    disabled={isScanning}
                     className="w-full bg-[#00ff88] text-[#0f2e24] py-4 rounded-2xl font-black text-lg flex items-center justify-center gap-3 hover:bg-[#00dd77] transition-all active:scale-[0.98] shadow-[0_8px_20px_rgba(0,255,136,0.3)] disabled:opacity-50"
                 >
                     {isScanning ? <Loader2 size={24} className="animate-spin" /> : <Camera size={24} strokeWidth={3} />}
                     {isScanning ? "NEURAL LINKING..." : "開始掃描食材"}
                 </button>
-
-                {scannedItems.length > 0 && (
-                    <button
-                        onClick={handleGenerateRecipes}
-                        disabled={isScanning || isGenerating}
-                        className="w-full bg-[#1a4d3d] text-[#00ff88] py-4 rounded-2xl font-black text-lg flex items-center justify-center gap-3 border-2 border-[#1a4d3d] hover:border-[#00ff88] transition-all active:scale-[0.98] disabled:opacity-50"
-                    >
-                        {isGenerating ? (
-                            <Loader2 size={24} className="animate-spin" />
-                        ) : (
-                            <Sparkles size={24} />
-                        )}
-                        {isGenerating ? "NEURAL LINKING..." : "啟動 AI 食譜合成"}
-                    </button>
-                )}
             </div>
         </div>
     );
