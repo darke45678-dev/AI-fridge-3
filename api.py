@@ -4,7 +4,7 @@ import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from ultralytics import YOLO
+# from ultralytics import YOLO (移至函數內載入以節省記憶體)
 from PIL import Image
 from dotenv import load_dotenv
 
@@ -22,24 +22,23 @@ app.add_middleware(
 )
 
 # === Configuration ===
-# Local YOLOv8 model path (.pt file)
 MODEL_PATH = 'best.pt'
-
-# Global model variable
 model = None
 
 def load_model():
-    """Lazy load the model to avoid startup errors if path is missing."""
+    """只有在需要時才載入模型，節省 Render 的啟動記憶體。"""
     global model
-    if model is None and MODEL_PATH != 'YOUR_MODEL_PATH_HERE':
+    if model is None:
         try:
+            from ultralytics import YOLO # 移到這裡才引入，避免啟動時直接 OOM
+            print(f"--- 正在嘗試從 {MODEL_PATH} 載入 AI 模型 ---")
             model = YOLO(MODEL_PATH)
-            print(f"Model loaded successfully from {MODEL_PATH}")
+            print("✅ 模型載入成功！")
         except Exception as e:
-            print(f"Error loading model: {e}")
+            print(f"❌ 載入失敗: {e}")
     return model
 
-# === Mock Recipe Database (Taiwan/Asian Cuisine Focus) ===
+# === Mock Recipe Database ===
 RECIPE_DB = {
     "tomato": {
         "name": "番茄炒蛋",
@@ -60,7 +59,12 @@ class DetectionRequest(BaseModel):
 
 @app.get("/")
 def health_check():
-    return {"status": "ok", "model_loaded": load_model() is not None}
+    # 首頁不觸發模型載入，確保 Render 監控不會因為加載太久而判定失敗
+    return {
+        "status": "online", 
+        "engine": "YOLOv8",
+        "message": "AI Fridge Backend is running. Sensors active."
+    }
 
 @app.post("/detect")
 async def detect(request: DetectionRequest):
@@ -269,7 +273,4 @@ async def generate_recipe(data: dict):
 
 if __name__ == "__main__":
     import uvicorn
-    import os
-    # Render 會自動注入 PORT 環境變數，若無則預設 8000
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
