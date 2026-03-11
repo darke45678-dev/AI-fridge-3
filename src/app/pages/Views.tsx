@@ -29,6 +29,11 @@ import { CookingProtocol } from "../components/recipes/CookingProtocol";
 import { notificationService } from "../services/notificationService";
 
 // --- Scanner Page ---
+/**
+ * 首頁掃描區 (Scanner)
+ * 利用 `useCamera` Hook 啟動裝置攝影機。畫面會顯示鏡頭即時影像與辨識框（交由 CameraView 處理）。
+ * 在此頁面使用 YOLO 模型針對影像內容進行推論，實現自動添加食材至庫存中。
+ */
 export function Scanner() {
     const navigate = useNavigate();
     const { scannedItems } = useIngredients();
@@ -46,6 +51,11 @@ export function Scanner() {
 }
 
 // --- Ingredients Page ---
+/**
+ * 單一/近期掃描食材結果頁 (Ingredients)
+ * 專門顯示系統剛剛辨識到或短期內加入的食材。
+ * 可快速增減數量、刪除掃描出錯的項目，或是全部清除。
+ */
 export function Ingredients() {
     const navigate = useNavigate();
     const { scannedItems, updateQuantity, removeItem, clearAll } = useIngredients();
@@ -69,6 +79,11 @@ export function Ingredients() {
 }
 
 // --- Recipes Page ---
+/**
+ * AI 食譜生成頁 (Recipes)
+ * 負責觸發大語言模型 (LLM) 呼叫，為用戶提供最佳的「清空方案」。
+ * 從上下文中取得所有庫存食材，並透過 `llmService` 產生符合現有材料的創意食譜。
+ */
 export function Recipes() {
     const navigate = useNavigate();
     const { scannedItems, recommendedRecipes, setRecipes } = useIngredients();
@@ -106,6 +121,12 @@ export function Recipes() {
     );
 }
 // --- Edit Item Modal ---
+/**
+ * 食材編輯對話框 (EditItemModal)
+ * 當使用者點擊「編輯」按鈕時會彈出這一個燈箱。
+ * 允許修改食材的名稱、關聯分類、保存位置 (冷藏/冷凍) 以及它的存放有效期限。
+ * 當有效期限設為0，會觸發動態的紅色過期警告 UI 讓用戶確認。
+ */
 function EditItemModal({ item, onSave, onDismiss }: { item: any, onSave: (id: string, updates: any) => void, onDismiss: () => void }) {
     const [name, setName] = useState(item.name);
     const [category, setCategory] = useState(item.category || "其他");
@@ -187,6 +208,14 @@ function EditItemModal({ item, onSave, onDismiss }: { item: any, onSave: (id: st
 }
 
 // --- 庫存管理主要頁面 (Inventory Management Page) ---
+/**
+ * 全庫存管理頁 (Inventory)
+ * 提供完整的冰箱內容清單，支援：
+ * 1. 關鍵字搜尋與語音搜尋功能 (`startVoiceInput`)
+ * 2. 分類標籤篩選 (全部、蔬菜、肉類等)
+ * 3. 儲存區域切換 (冷藏庫 / 冷凍庫)
+ * 4. 食材的手動新增與現有項目的參數編輯操作。
+ */
 export function Inventory() {
     const navigate = useNavigate();
     // 從 Context 獲取全域狀態與操作方法
@@ -386,6 +415,12 @@ export function Inventory() {
 }
 
 // --- Neural Analytics Dashboard ---
+/**
+ * 神經網路數據面板 (NeuralAnalyticsDashboard)
+ * 應用程式最核心的數據視覺化區域，展示兩個維度：
+ * 1. 歷史 (History): 將使用者過去 30 天內丟棄/浪費的食材量，以圖表型態渲染。
+ * 2. 預測 (Predict): 基於所有食材的保存期限進行推測，以比例條與高危險清單的形式，警告用戶哪些食材即將浪費。
+ */
 function NeuralAnalyticsDashboard({ data, scannedItems }: { data: any[], scannedItems: ScannedItem[] }) {
     const [tab, setTab] = useState<"history" | "predict">("history");
     const [activeZone, setActiveZone] = useState<"risk" | "warning" | "safe" | null>(null);
@@ -603,6 +638,12 @@ function NeuralAnalyticsDashboard({ data, scannedItems }: { data: any[], scanned
 }
 
 // --- Profile & Saved & Detail (Simplified Combined) ---
+/**
+ * 個人設定頁 (Profile)
+ * 提供使用者客製化自己的系統設定，目前實作了：
+ * 1. 系統通知開關 (連動 Notification API 提出系統授權申請)
+ * 2. 系統外觀深色模式切換 (Dark Mode toggle - 但整個系統目前強制採用暗色賽博龐克為主)
+ */
 export function Profile() {
     const { settings, updateSettings } = useIngredients();
 
@@ -661,6 +702,11 @@ export function Profile() {
     );
 }
 
+/**
+ * 系統數據中心 / 保存內容頁 (Saved / Data Statistics)
+ * 本頁面整合了 NeuralAnalyticsDashboard 作為主要視覺呈現區塊。
+ * 當未來有實作「我的最愛食譜」時，這頁面也會用來陳列使用者過去儲存的高品質 AI 生成食譜。
+ */
 export function Saved() {
     const nav = useNavigate();
     const { wasteHistory, scannedItems } = useIngredients();
@@ -685,6 +731,15 @@ export function Saved() {
     );
 }
 
+/**
+ * 食譜細節與烹調引導頁 (RecipeDetail)
+ * 當使用者從「AI 推薦」列表中點擊特定食譜時進入的畫面。
+ * 支援功能：
+ * 1. 食材勾選清單 (`IngredientChecklist`)
+ * 2. 逐步文字料理步驟 (`CookingProtocol`)
+ * 3. 系統通知「儲存食譜」到雲端的實作彈窗
+ * 4. 如果食譜壞了或不滿意，可以點擊「重新分析」再次推論 LLM 提供新食譜。
+ */
 export function RecipeDetail() {
     const { id } = useParams();
     const nav = useNavigate();

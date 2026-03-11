@@ -2,6 +2,10 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { llmService } from "./llmService";
 import { notificationService } from "./notificationService";
 
+/**
+ * 介面 (Interface): 單件掃描食材 (ScannedItem)
+ * 用於規範每一個被系統記錄或 YOLO 辨識出來的食材結構。
+ */
 export interface ScannedItem {
     id: string;
     name: string;
@@ -41,8 +45,20 @@ interface IngredientContextType {
     updateSettings: (settings: Partial<{ notifications: boolean; darkMode: boolean }>) => void;
 }
 
+/**
+ * 上下文宣告 (Context Context): IngredientContext
+ * 用來實現跨元件共享狀態 (Global State)，避免 Props Drilling。
+ */
 const IngredientContext = createContext<IngredientContextType | undefined>(undefined);
 
+/**
+ * 狀態池提供者 (Provider): IngredientProvider
+ * 必須包在應用程式的最外層 (如 App.tsx)，它持有並管理所有核心業務資料：
+ * 1. 冰箱內所有庫存 (scannedItems)
+ * 2. 暫存辨識清單 (tempDetections)
+ * 3. 系統全域設定 (settings)
+ * 4. 食譜庫 (recommendedRecipes)
+ */
 export function IngredientProvider({ children }: { children: ReactNode }) {
     const [scannedItems, setScannedItems] = useState<ScannedItem[]>([]);
     const [recommendedRecipes, setRecommendedRecipes] = useState<any[]>([]);
@@ -93,7 +109,7 @@ export function IngredientProvider({ children }: { children: ReactNode }) {
         }
     }, [scannedItems, settings.notifications]);
 
-    // Sync to localStorage
+    /** 同步狀態至本地端 localStorage，實現離線存取與關閉保留 (Data Persistence) */
     useEffect(() => {
         localStorage.setItem("scannedIngredients", JSON.stringify(scannedItems));
     }, [scannedItems]);
@@ -106,6 +122,9 @@ export function IngredientProvider({ children }: { children: ReactNode }) {
         localStorage.setItem("appSettings", JSON.stringify(settings));
     }, [settings]);
 
+    /**
+     * 新增單一食材進入庫存
+     */
     const addItem = (item: Partial<ScannedItem>) => {
         const now = Date.now();
         const uniqueId = item.id || `${now}-${Math.random().toString(36).substr(2, 9)}`;

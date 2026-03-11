@@ -8,6 +8,18 @@ interface CameraViewProps {
     videoRef: RefObject<HTMLVideoElement | null>;
 }
 
+/**
+ * 攝影機掃描視圖 (CameraView)
+ * 負責處理影像擷取、顯示即時預覽，並與後端 YOLO 辨識 API 進行串接的視覺介面。
+ * 
+ * 核心流程：
+ * 1. 從父層接收綁定的 `videoRef`，用來播放即時影像。
+ * 2. 使用者按下「開始掃描」(`handleScan`) 時：
+ *    a. 擷取當前影像畫格 (Canvas toDataURL)。
+ *    b. 發送 base64 影像到後端偵測 API (`/detect`)。
+ * 3. 接收 YOLO 回傳的 bounding box (物件框)，將座標轉換百分比並疊加在畫面中。
+ * 4. 將成功辨識的食材丟進 Context 的 `addItem` 儲存。
+ */
 export function CameraView({ videoRef }: CameraViewProps) {
     const { addItem, scannedItems, tempDetections, clearTempDetections } = useIngredients();
     const [isScanning, setIsScanning] = useState(false); // 是否正在進行 AI 掃描

@@ -2,11 +2,17 @@ import { X } from "lucide-react";
 import { useState } from "react";
 
 interface AddEntryFormProps {
-    onAdd: (item: { name: string; quantity: number; category: string }) => void;
-    onDismiss: () => void;
-    categories: string[];
+    onAdd: (item: { name: string; quantity: number; category: string }) => void; // 確認新增時要執行的 Callback
+    onDismiss: () => void; // 點擊關閉或新增完成後，關閉表單的 Callback
+    categories: string[]; // 允許使用者選擇的分類下拉選項
 }
 
+/**
+ * 手動新增食材表單 (AddEntryForm)
+ * 當 YOLO AI 無法正確辨識，或使用者想直接把菜市場剛買回來的整包內容輸入時使用。
+ * 提供名稱欄位、數量調整器與分類下拉選單，介面採用懸浮卡片 (Card) 的設計，
+ * 點擊 Confirm Registry 後會透過 `onAdd` 事件拋回給父層寫入 Context。
+ */
 export function AddEntryForm({ onAdd, onDismiss, categories }: AddEntryFormProps) {
     const [name, setName] = useState("");
     const [quantity, setQuantity] = useState(1);

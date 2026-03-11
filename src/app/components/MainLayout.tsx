@@ -5,20 +5,33 @@ import { useIngredients } from "../services/IngredientContext";
 import { useEffect, useState } from "react";
 import { Bell } from "lucide-react";
 
+/**
+ * 主佈局組件 (Main Layout)
+ * 這是整個應用的核心外框，所有分頁(Outlet)都會在這個佈局內被渲染。
+ * 
+ * 功能亮點：
+ * 1. 控制全域主題：支援深色 (Dark) 與淺色 (Light) 主題切換 (雖然目前寫死深色賽博龐克為主)。
+ * 2. 頁面轉場動畫：利用 `framer-motion` 在每次切換路徑 (Location.pathname) 時，產生平滑的左右滑動轉場過渡。
+ * 3. 處理滑動手勢：監聽左右滑動 (`drag="x"`)，提供類原生 App 的左翻/右翻體驗。
+ * 4. 系統級通知顯示：內建模擬的 `Toast` 系統，負責監聽並彈出「APP內的高能警告通知」。
+ */
 export function MainLayout() {
     const location = useLocation();
     const navigate = useNavigate();
     const { settings } = useIngredients();
 
+    // 定義可以讓使用者橫向滑動輪轉的主要功能分頁排序
     const tabs = ["/", "/inventory", "/recipes", "/saved", "/profile"];
+    // 取得當下畫面處在哪一個分頁索引，用來計算左右切換的方向
     const currentIndex = tabs.findIndex(t => t === location.pathname || (t !== '/' && location.pathname.startsWith(t)));
 
+    // 處理觸控滑動結束的核心邏輯
     const handleDragEnd = (_: any, info: { offset: { x: number } }) => {
-        const threshold = 100;
+        const threshold = 100; // 滑動距離超過 100 像素才觸發切換
         if (info.offset.x > threshold && currentIndex > 0) {
-            navigate(tabs[currentIndex - 1]);
+            navigate(tabs[currentIndex - 1]); // 往左翻
         } else if (info.offset.x < -threshold && currentIndex < tabs.length - 1 && currentIndex !== -1) {
-            navigate(tabs[currentIndex + 1]);
+            navigate(tabs[currentIndex + 1]); // 往右翻
         }
     };
 

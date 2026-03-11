@@ -2,6 +2,14 @@ import { ChevronRight, Plus, Minus, X, Info } from "lucide-react";
 import { useIngredients } from "../../services/IngredientContext";
 import { useNavigate } from "react-router";
 
+/**
+ * 掃描結果摘要面板 (DetectionSummary)
+ * 用來在掃描畫面 (Scanner) 或是結果頁，呈現剛剛由 AI 辨識出的食材清單。
+ *
+ * 支援兩種模式：
+ * 1. 唯讀模式 (readOnly = true)：只顯示已經被確認新增的物體名稱與數量。
+ * 2. 操作模式：允許使用者增減數量、刪除誤判項目、以及清理整個暫存區。
+ */
 export function DetectionSummary({ readOnly = false }: { readOnly?: boolean }) {
     const { tempDetections, updateQuantity, removeItem, clearTempDetections, selectedIds, toggleSelection } = useIngredients();
     const navigate = useNavigate();

@@ -6,6 +6,15 @@ interface RecipeCardProps {
     getCategoryLabel: (cat: string) => string;
 }
 
+/**
+ * 食譜卡片組件 (RecipeCard)
+ * 負責渲染在「AI 食譜推薦列表」中的單一食譜預覽圖文框。
+ * 
+ * 功能亮點：
+ * 1. 使用大幅背景圖片配合漸層遮罩，襯托賽博龐克介面。
+ * 2. 顯示 AI 運算的「匹配度 (Match Score)」，展現科技感。
+ * 3. 點擊後會透過 `onClick` 事件導航至該食譜的詳細步驟頁 `RecipeDetail`。
+ */
 export function RecipeCard({ recipe, onClick, getCategoryLabel }: RecipeCardProps) {
     return (
         <div
