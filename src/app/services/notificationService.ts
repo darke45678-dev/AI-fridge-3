@@ -28,8 +28,17 @@ export const notificationService = {
     /**
      * Send a web notification
      */
-    send(title: string, body: string) {
+    async send(title: string, body: string) {
         console.log(`🔔 [NotificationService] Permission status: ${Notification.permission}`);
+
+        // Try to request on the spot if it's default
+        if (Notification.permission === "default") {
+            try {
+                await Notification.requestPermission();
+            } catch (e) {
+                console.error("🔔 [NotificationService] Request permission failed:", e);
+            }
+        }
 
         if (Notification.permission === "granted") {
             try {
@@ -58,7 +67,8 @@ export const notificationService = {
 
         if (lastNotified === today) {
             console.log("🔔 [NotificationService] Notification already sent today. Skipping.");
-            return;
+            // 為了方便測試，我們暫時先不阻擋每日一次的限制。正式環境可將下面這行 return 開啟。
+            // return;
         }
 
         console.log("🔔 [NotificationService] Checking ingredients...", { itemCount: items.length });
