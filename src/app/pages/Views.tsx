@@ -111,11 +111,12 @@ function EditItemModal({ item, onSave, onDismiss }: { item: any, onSave: (id: st
     const [category, setCategory] = useState(item.category || "其他");
     const [storageType, setStorageType] = useState(item.storageType || "fridge");
     const [expiryDays, setExpiryDays] = useState(item.expiryDays !== undefined ? item.expiryDays : 7);
+    const [confirmingZero, setConfirmingZero] = useState(false);
 
     const handleConfirmSave = () => {
-        if (expiryDays === 0) {
-            const confirm = window.confirm("【系統提示】您將保存期限設定為 0 天，這會將食材直接標記為「已過期」，請問是否確定？");
-            if (!confirm) return;
+        if (expiryDays === 0 && !confirmingZero) {
+            setConfirmingZero(true);
+            return;
         }
         onSave(item.id, { name, category, storageType, expiryDays });
     };
@@ -159,9 +160,27 @@ function EditItemModal({ item, onSave, onDismiss }: { item: any, onSave: (id: st
                     </div>
                 </div>
 
-                <button onClick={handleConfirmSave} className="w-full bg-[#00ff88] text-[#0f2e24] py-4 rounded-xl font-black text-sm uppercase tracking-widest shadow-lg active:scale-95 transition-all">
-                    更新資料 (Update)
-                </button>
+                <div className="space-y-3">
+                    {confirmingZero && (
+                        <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl mb-4 animate-in fade-in slide-in-from-bottom-2">
+                            <h4 className="text-red-500 font-black text-xs uppercase tracking-widest mb-1 flex items-center gap-2">
+                                <AlertTriangle size={14} />警告：直接標記過期
+                            </h4>
+                            <p className="text-[10px] text-gray-400 font-bold leading-relaxed">
+                                您將保存期限設為 0 天，食材將立刻被歸類至「已過期」。若確定請再次點擊下方按鈕。
+                            </p>
+                        </div>
+                    )}
+
+                    <button onClick={handleConfirmSave} className={`w-full py-4 rounded-xl font-black text-sm uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 ${confirmingZero ? 'bg-red-500 text-white' : 'bg-[#00ff88] text-[#0f2e24]'}`}>
+                        {confirmingZero ? '確定標記為過期' : '更新資料 (Update)'}
+                    </button>
+                    {confirmingZero && (
+                        <button onClick={() => setConfirmingZero(false)} className="w-full py-3 rounded-xl font-black text-xs uppercase tracking-widest text-gray-400 hover:text-white bg-white/5 transition-all">
+                            取消操作 (Cancel)
+                        </button>
+                    )}
+                </div>
             </div>
         </div>
     );
