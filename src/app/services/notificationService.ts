@@ -29,7 +29,12 @@ export const notificationService = {
      * Send a web notification
      */
     send(title: string, body: string) {
-        console.log(`🔔 [NotificationService] Permission status: ${Notification.permission}`);
+        console.log(`🔔 [NotificationService] Sending notification: ${title} / ${body}`);
+
+        // 發送網頁內建的神經網路 Toast 事件
+        window.dispatchEvent(new CustomEvent('app-notification', { detail: { title, body } }));
+
+        console.log(`🔔 [NotificationService] OS Permission status: ${Notification.permission}`);
 
         if (Notification.permission === "granted") {
             try {
@@ -37,12 +42,12 @@ export const notificationService = {
                     body,
                     silent: false, // 強制發出聲音
                 });
-                console.log("🔔 [NotificationService] Notification object created successfully.");
+                console.log("🔔 [NotificationService] Desktop Notification object created successfully.");
             } catch (e) {
-                console.error("🔔 [NotificationService] Error creating notification:", e);
+                console.error("🔔 [NotificationService] Error creating desktop notification:", e);
             }
         } else {
-            console.warn("🔔 [NotificationService] Cannot send notification because permission is:", Notification.permission);
+            console.warn("🔔 [NotificationService] Desktop notification skipped because OS permission is:", Notification.permission);
         }
     },
 

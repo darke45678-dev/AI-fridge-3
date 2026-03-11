@@ -2,6 +2,8 @@ import { Outlet, useLocation, useNavigate } from "react-router";
 import { BottomNav } from "../components/BottomNav";
 import { motion, AnimatePresence } from "framer-motion";
 import { useIngredients } from "../services/IngredientContext";
+import { useEffect, useState } from "react";
+import { Bell } from "lucide-react";
 
 export function MainLayout() {
     const location = useLocation();
@@ -19,6 +21,20 @@ export function MainLayout() {
             navigate(tabs[currentIndex + 1]);
         }
     };
+
+    const [toast, setToast] = useState<{ title: string, body: string } | null>(null);
+
+    useEffect(() => {
+        const handleNotification = (e: any) => {
+            setToast({ title: e.detail.title, body: e.detail.body });
+            // 5秒後自動關閉
+            setTimeout(() => {
+                setToast(null);
+            }, 5000);
+        };
+        window.addEventListener('app-notification', handleNotification);
+        return () => window.removeEventListener('app-notification', handleNotification);
+    }, []);
 
     return (
         <div className={`min-h-screen bg-black flex justify-center w-full ${!settings.darkMode ? 'light-theme' : ''}`}>
@@ -41,6 +57,32 @@ export function MainLayout() {
                     </AnimatePresence>
                 </main>
                 <BottomNav />
+
+                {/* 網頁內建模擬通知系統，保證能看到 (Cyberpunk 風格) */}
+                <AnimatePresence>
+                    {toast && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -50, scale: 0.9 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                            className="fixed top-6 left-1/2 -translate-x-1/2 w-[90%] max-w-[380px] z-[9999] pointer-events-none"
+                        >
+                            <div className="bg-[#1a4d3d]/90 backdrop-blur-xl border border-red-500/50 rounded-2xl p-4 shadow-[0_10px_40px_rgba(239,68,68,0.3)] flex items-start gap-4">
+                                <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 border border-red-500/50">
+                                    <Bell size={18} className="text-red-500" />
+                                </div>
+                                <div>
+                                    <h4 className="text-red-500 font-black text-[11px] tracking-widest uppercase mb-1 drop-shadow-[0_0_5px_rgba(239,68,68,0.5)]">
+                                        {toast.title}
+                                    </h4>
+                                    <p className="text-xs text-white font-bold leading-relaxed">
+                                        {toast.body}
+                                    </p>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
         </div>
     );
