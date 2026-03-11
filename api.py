@@ -22,7 +22,7 @@ app.add_middleware(
 )
 
 # === Configuration ===
-MODEL_PATH = 'best.pt'
+MODEL_PATH = 'yolov8n.pt' # 使用最輕量的模型檔案 (約 6MB) 以適應 Render 免費版記憶體
 model = None
 
 def load_model():
