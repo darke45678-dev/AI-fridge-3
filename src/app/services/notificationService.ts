@@ -28,17 +28,8 @@ export const notificationService = {
     /**
      * Send a web notification
      */
-    async send(title: string, body: string) {
+    send(title: string, body: string) {
         console.log(`🔔 [NotificationService] Permission status: ${Notification.permission}`);
-
-        // Try to request on the spot if it's default
-        if (Notification.permission === "default") {
-            try {
-                await Notification.requestPermission();
-            } catch (e) {
-                console.error("🔔 [NotificationService] Request permission failed:", e);
-            }
-        }
 
         if (Notification.permission === "granted") {
             try {
