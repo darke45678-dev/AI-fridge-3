@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { PageHeader } from "../components/Shared";
-import { useIngredients } from "../services/IngredientContext";
+import { useIngredients, ScannedItem } from "../services/IngredientContext";
 import { formatRelativeTime } from "../services/timeUtils";
 import { useCamera } from "../hooks/useCamera";
 import { CameraView } from "../components/scanner/CameraView";
@@ -26,6 +26,7 @@ import { IngredientCloud } from "../components/recipes/IngredientCloud";
 import { RecipeHero } from "../components/recipes/RecipeHero";
 import { IngredientChecklist } from "../components/recipes/IngredientChecklist";
 import { CookingProtocol } from "../components/recipes/CookingProtocol";
+import { notificationService } from "../services/notificationService";
 
 // --- Scanner Page ---
 export function Scanner() {
@@ -109,7 +110,15 @@ function EditItemModal({ item, onSave, onDismiss }: { item: any, onSave: (id: st
     const [name, setName] = useState(item.name);
     const [category, setCategory] = useState(item.category || "其他");
     const [storageType, setStorageType] = useState(item.storageType || "fridge");
-    const [expiryDays, setExpiryDays] = useState(item.expiryDays || 7);
+    const [expiryDays, setExpiryDays] = useState(item.expiryDays !== undefined ? item.expiryDays : 7);
+
+    const handleConfirmSave = () => {
+        if (expiryDays === 0) {
+            const confirm = window.confirm("【系統提示】您將保存期限設定為 0 天，這會將食材直接標記為「已過期」，請問是否確定？");
+            if (!confirm) return;
+        }
+        onSave(item.id, { name, category, storageType, expiryDays });
+    };
 
     return (
         <div className="fixed inset-0 z-[100] bg-[#0f2e24]/90 backdrop-blur-xl flex items-center justify-center p-6">
@@ -145,12 +154,12 @@ function EditItemModal({ item, onSave, onDismiss }: { item: any, onSave: (id: st
                         </div>
                         <div>
                             <label className="text-[10px] font-black uppercase text-gray-500 mb-2 block tracking-widest">保鮮期 (天)</label>
-                            <input type="number" value={expiryDays} onChange={(e) => setExpiryDays(parseInt(e.target.value) || 0)} className="w-full bg-[#0f2e24] border border-white/10 rounded-xl px-4 py-3 text-white font-bold focus:border-[#00ff88] outline-none transition-colors text-center" />
+                            <input type="number" min="0" value={expiryDays} onChange={(e) => setExpiryDays(parseInt(e.target.value) || 0)} className="w-full bg-[#0f2e24] border border-white/10 rounded-xl px-4 py-3 text-white font-bold focus:border-[#00ff88] outline-none transition-colors text-center" />
                         </div>
                     </div>
                 </div>
 
-                <button onClick={() => onSave(item.id, { name, category, storageType, expiryDays })} className="w-full bg-[#00ff88] text-[#0f2e24] py-4 rounded-xl font-black text-sm uppercase tracking-widest shadow-lg active:scale-95 transition-all">
+                <button onClick={handleConfirmSave} className="w-full bg-[#00ff88] text-[#0f2e24] py-4 rounded-xl font-black text-sm uppercase tracking-widest shadow-lg active:scale-95 transition-all">
                     更新資料 (Update)
                 </button>
             </div>
@@ -197,9 +206,16 @@ export function Inventory() {
         i.name.toLowerCase().includes(search.toLowerCase())
     );
     const total = scannedItems.reduce((s, i) => s + i.quantity, 0);
+    const expiredCount = scannedItems.filter(i => {
+        const daysPassed = Math.floor((Date.now() - (i.timestamp || Date.now())) / (1000 * 60 * 60 * 24));
+        const expiryDays = i.expiryDays !== undefined ? i.expiryDays : 7;
+        const daysLeft = expiryDays - daysPassed;
+        return daysLeft <= 0 || i.isSpoiled; // <=0 as expired
+    }).length;
 
     const handleSaveEdit = (id: string, updates: any) => {
-        updateItem(id, updates);
+        // Force timestamp reset to recalculate days cleanly from "today" when edited
+        updateItem(id, { ...updates, timestamp: Date.now() });
         setEditingItem(null);
     };
 
@@ -230,9 +246,7 @@ export function Inventory() {
                 </div>
             </div>
 
-            <div className="px-6 mb-8 mt-2">
-                <WasteChart data={wasteHistory} />
-            </div>
+            {/* 統計圖已搬移至已儲存食譜頁面 */}
 
             <div className="px-6 mb-2">
                 <button
@@ -255,7 +269,7 @@ export function Inventory() {
                 </button>
             </div>
 
-            <InventoryStats totalItems={total} freshItems={scannedItems.length} />
+            <InventoryStats totalItems={total} freshItems={scannedItems.length - expiredCount} expiredItems={expiredCount} />
 
             {showForm && (<AddEntryForm onAdd={addItem} onDismiss={() => setShowForm(false)} categories={["全部", "蔬菜", "水果", "乳製品", "肉類", "五穀", "其他"]} />)}
 
@@ -270,13 +284,13 @@ export function Inventory() {
                     <div className="space-y-3">
                         {filtered.map(i => {
                             const daysPassed = Math.floor((Date.now() - (i.timestamp || Date.now())) / (1000 * 60 * 60 * 24));
-                            const expiryDays = i.expiryDays || 7;
+                            const expiryDays = i.expiryDays !== undefined ? i.expiryDays : 7;
                             const daysLeft = expiryDays - daysPassed;
-                            const isExpired = daysLeft < 0;
-                            const isWarning = daysLeft >= 0 && daysLeft <= 2;
+                            const isExpired = daysLeft <= 0;
+                            const isWarning = !isExpired && daysLeft <= 2;
 
                             return (
-                                <div key={i.id} className={`bg-[#1a4d3d]/30 rounded-2xl p-4 border ${i.isSpoiled || isExpired ? 'border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.1)]' : isWarning ? 'border-amber-400/50 shadow-[0_0_15px_rgba(251,191,36,0.1)]' : 'border-white/5'} flex flex-col gap-3 transition-all relative overflow-hidden group`}>
+                                <div key={i.id} className={`bg-[#1a4d3d]/30 rounded-2xl p-4 border transition-all relative overflow-hidden group ${i.isSpoiled || isExpired ? 'border-red-500/50 bg-red-500/10 shadow-[0_0_20px_rgba(239,68,68,0.1)]' : isWarning ? 'border-amber-400/50 bg-amber-400/5 shadow-[0_0_20px_rgba(251,191,36,0.1)]' : 'border-white/5'}`}>
 
                                     <div className="flex items-center gap-4">
                                         <button
@@ -294,17 +308,15 @@ export function Inventory() {
                                         </div>
 
                                         <div className="flex-1 min-w-0">
-                                            <h4 className={`font-black text-sm truncate uppercase ${i.isSpoiled || isExpired ? 'text-red-500 line-through' : 'text-white'}`}>{i.name}</h4>
+                                            <h4 className={`font-black text-sm truncate uppercase ${i.isSpoiled || isExpired ? 'text-red-500/70 line-through' : 'text-white'}`}>{i.name}</h4>
                                             <div className="flex flex-wrap items-center gap-2 mt-1">
                                                 <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-md ${i.isSpoiled ? 'bg-red-500/10 text-red-500' : storageTab === 'fridge' ? 'bg-[#00ff88]/10 text-[#00ff88]' : 'bg-blue-400/10 text-blue-400'}`}>
                                                     {i.isSpoiled ? "品質異常" : (i.category || "其他")}
                                                 </span>
-                                                {!i.isSpoiled && (
-                                                    <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 ${isExpired ? 'bg-red-500/20 text-red-400' : isWarning ? 'bg-amber-400/20 text-amber-400' : 'bg-white/5 text-gray-400'}`}>
-                                                        <Clock size={8} />
-                                                        {isExpired ? `已過期 ${Math.abs(daysLeft)} 天` : isWarning ? `剩餘 ${daysLeft} 天` : `保鮮 ${daysLeft} 天`}
-                                                    </span>
-                                                )}
+                                                <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 ${isExpired || i.isSpoiled ? 'bg-red-500 text-white' : isWarning ? 'bg-amber-400 text-[#0f2e24]' : 'bg-white/5 text-gray-400'}`}>
+                                                    <Clock size={8} />
+                                                    {isExpired ? "已過期 (EXPIRED)" : i.isSpoiled ? "偵測毀損" : isWarning ? `即將到期 (${daysLeft}天)` : `保鮮 ${daysLeft} 天`}
+                                                </span>
                                                 <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 bg-white/5 text-gray-400">
                                                     {new Date(i.timestamp || Date.now()).toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                                                 </span>
@@ -312,6 +324,8 @@ export function Inventory() {
                                         </div>
 
                                         <div className="flex items-center gap-2">
+                                            {(isExpired || i.isSpoiled) && <div className="text-[10px] font-black text-red-500 animate-pulse hidden sm:block">請移除食材</div>}
+                                            {isWarning && <div className="text-[10px] font-black text-amber-400 animate-pulse hidden sm:block">儘速使用</div>}
                                             <button onClick={() => setEditingItem(i)} className="w-8 h-8 rounded-full bg-white/5 text-gray-400 flex items-center justify-center hover:text-white hover:bg-white/10 transition-colors">
                                                 <Edit2 size={14} />
                                             </button>
@@ -352,52 +366,218 @@ export function Inventory() {
     );
 }
 
-// --- Waste Chart Component ---
-function WasteChart({ data }: { data: any[] }) {
-    const [period, setPeriod] = useState("week");
-    const max = Math.max(...data.map(d => d.amount), 5); // Default to smaller max since units are portions/items
-    const chartHeight = 100;
+// --- Neural Analytics Dashboard ---
+function NeuralAnalyticsDashboard({ data, scannedItems }: { data: any[], scannedItems: ScannedItem[] }) {
+    const [tab, setTab] = useState<"history" | "predict">("history");
+    const [activeZone, setActiveZone] = useState<"risk" | "warning" | "safe" | null>(null);
+
+    // 計算預測浪費 (未來 3 天內過期的)
+    const expiringSoon = scannedItems.filter(i => {
+        const daysPassed = Math.floor((Date.now() - (i.timestamp || Date.now())) / (1000 * 60 * 60 * 24));
+        const daysLeft = (i.expiryDays !== undefined ? i.expiryDays : 7) - daysPassed;
+        return daysLeft >= 0 && daysLeft <= 3 && !i.isSpoiled; // 擴大到 3 天內到期
+    });
+
+    // 偵錯日誌：當切換到預測分頁時輸出
+    useEffect(() => {
+        if (tab === "predict") {
+            const list = scannedItems.map(i => {
+                const daysPassed = Math.floor((Date.now() - (i.timestamp || Date.now())) / (1000 * 60 * 60 * 24));
+                return `${i.name}: ${(i.expiryDays !== undefined ? i.expiryDays : 7) - daysPassed} days left`;
+            });
+            console.log("🔮 [NeuralAnalytics] Inventory Status:", list);
+            console.log("🔮 [NeuralAnalytics] Expiring Soon:", expiringSoon);
+        }
+    }, [tab, expiringSoon]);
+
+    const categoriesAtRisk = Array.from(new Set(expiringSoon.map(i => i.category || "其他")));
+    const sustainabilityIndex = 100 - (data.reduce((s, d) => s + d.amount, 0) * 2); // 虛擬惜食指數
+
+    const max = Math.max(...data.map(d => d.amount), 5);
+    const chartHeight = 80;
 
     return (
-        <div className="bg-[#1a4d3d]/30 rounded-[2.5rem] p-6 border border-white/5 mb-8">
-            <div className="flex items-center justify-between mb-6">
+        <div className="bg-[#1a4d3d]/30 rounded-[2.5rem] p-6 border border-white/5 mb-8 relative overflow-hidden group">
+            {/* 背景裝飾光暈 - 確保加上 pointer-events-none 避免阻擋點擊 */}
+            <div className="absolute -top-24 -right-24 w-48 h-48 bg-[#00ff88]/5 rounded-full blur-[80px] pointer-events-none" />
+
+            <div className="flex items-center justify-between mb-8 relative z-20">
                 <div>
-                    <h3 className="text-[10px] font-black text-[#00ff88] uppercase tracking-widest mb-1">食物浪費統計</h3>
-                    <p className="text-[8px] text-gray-400 font-bold uppercase">單位: 份數</p>
+                    <h3 className="text-[10px] font-black text-[#00ff88] uppercase tracking-[0.2em] mb-1">數據統計 (Data Statistics)</h3>
+                    <div className="flex items-center gap-2">
+                        <div className="text-xl font-black text-white tracking-tighter">{sustainabilityIndex}%</div>
+                        <div className="text-[8px] font-bold text-gray-500 uppercase tracking-widest border-l border-white/10 pl-2">惜食達成率</div>
+                    </div>
                 </div>
-                <div className="flex bg-[#0f2e24] p-1 rounded-xl border border-white/5">
-                    {["week", "month"].map(p => (
-                        <button
-                            key={p}
-                            onClick={() => setPeriod(p)}
-                            className={`px-3 py-1.5 rounded-lg text-[8px] font-black uppercase transition-all ${period === p ? "bg-[#00ff88] text-[#0f2e24]" : "text-gray-500"}`}
-                        >
-                            {p === "week" ? "Week" : "Month"}
-                        </button>
-                    ))}
+                <div className="flex bg-[#0f2e24] p-1 rounded-xl border border-white/10">
+                    <button onClick={() => setTab("history")} className={`px-4 py-1.5 rounded-lg text-[8px] font-black uppercase transition-all ${tab === "history" ? "bg-[#00ff88] text-[#0f2e24]" : "text-gray-500"}`}>歷史</button>
+                    <button onClick={() => setTab("predict")} className={`px-4 py-1.5 rounded-lg text-[8px] font-black uppercase transition-all ${tab === "predict" ? "bg-amber-400 text-[#0f2e24]" : "text-gray-500"}`}>預測</button>
                 </div>
             </div>
 
-            <div className="relative h-[120px] w-full flex items-end justify-between gap-2 px-2">
-                {data.map((d, i) => {
-                    const height = (d.amount / max) * chartHeight;
-                    return (
-                        <div key={i} className="flex-1 flex flex-col items-center gap-2 group">
-                            <div className="relative w-full flex items-end justify-center">
-                                <motion.div
-                                    initial={{ height: 0 }}
-                                    animate={{ height }}
-                                    className={`w-full max-w-[12px] rounded-t-lg transition-all ${d.amount >= 3 ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.4)]' : 'bg-[#00ff88] shadow-[0_0_10px_rgba(0,255,136,0.2)]'}`}
-                                />
-                                <div className="absolute -top-6 opacity-0 group-hover:opacity-100 transition-opacity bg-black/80 px-2 py-1 rounded text-[8px] font-black text-white whitespace-nowrap z-10 border border-white/10">
-                                    {d.amount} 份
+            <AnimatePresence mode="wait">
+                {tab === "history" ? (
+                    <motion.div
+                        key="history"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="relative h-[130px] w-full flex items-end gap-3 px-2 overflow-x-auto no-scrollbar pb-6 pt-2"
+                        ref={(el) => {
+                            if (el) {
+                                // 預設讓他滾動到最右邊（看到最新的紀錄）
+                                setTimeout(() => { el.scrollLeft = el.scrollWidth; }, 100);
+                            }
+                        }}
+                    >
+                        {data.map((d, i) => {
+                            const height = (d.amount / max) * chartHeight;
+                            return (
+                                <div key={i} className="flex-shrink-0 w-8 flex flex-col items-center gap-2 group/bar relative cursor-pointer pt-6">
+                                    {/* 提供懸浮顯示具體數值 */}
+                                    <div className="absolute top-0 opacity-0 group-hover/bar:opacity-100 transition-all duration-300 -translate-y-2 group-hover/bar:translate-y-0 flex flex-col items-center">
+                                        <span className="bg-[#0f2e24] border border-white/20 text-white text-[8px] font-black px-2 py-1 rounded-lg tracking-widest shadow-xl">
+                                            {d.amount} 個
+                                        </span>
+                                        <div className="w-1 h-1 bg-white/20 rotate-45 -mt-0.5" />
+                                    </div>
+                                    <div className="relative w-full flex items-end justify-center">
+                                        <motion.div
+                                            initial={{ height: 0 }}
+                                            animate={{ height }}
+                                            className={`w-full max-w-[12px] rounded-t-full transition-all duration-500 group-hover/bar:brightness-150 ${d.amount >= 3 ? 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'bg-[#00ff88] shadow-[0_0_15px_rgba(0,255,136,0.2)]'}`}
+                                        />
+                                    </div>
+                                    <span className="text-[7px] font-black text-gray-500 group-hover/bar:text-white transition-colors">{d.date.split("-").slice(1).join("/")}</span>
                                 </div>
-                            </div>
-                            <span className="text-[6px] font-black text-gray-500 uppercase">{d.date.split("-").slice(1).join("/")}</span>
-                        </div>
-                    );
-                })}
-                <div className="absolute bottom-6 left-0 right-0 h-[1px] bg-white/5" />
+                            );
+                        })}
+                        <div className="absolute bottom-6 left-0 min-w-full w-max h-[1px] bg-white/5 -z-10" />
+                    </motion.div>
+                ) : (
+                    <motion.div
+                        key="predict"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="py-2"
+                    >
+                        {(() => {
+                            const total = scannedItems.length;
+                            if (total === 0) {
+                                return (
+                                    <div className="flex flex-col items-center justify-center py-6 text-center border-2 border-dashed border-white/5 rounded-3xl">
+                                        <Package size={24} className="text-white/20 mb-3" />
+                                        <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">請先新增食材以啟用預測</p>
+                                    </div>
+                                );
+                            }
+
+                            const riskItems = scannedItems.filter(i => {
+                                const daysPassed = Math.floor((Date.now() - (i.timestamp || Date.now())) / (1000 * 60 * 60 * 24));
+                                const daysLeft = (i.expiryDays !== undefined ? i.expiryDays : 7) - daysPassed;
+                                return daysLeft > 0 && daysLeft <= 2 && !i.isSpoiled; // Exclude already expired (0)
+                            });
+                            const warningItems = scannedItems.filter(i => {
+                                const daysPassed = Math.floor((Date.now() - (i.timestamp || Date.now())) / (1000 * 60 * 60 * 24));
+                                const daysLeft = (i.expiryDays !== undefined ? i.expiryDays : 7) - daysPassed;
+                                return daysLeft > 2 && daysLeft <= 5 && !i.isSpoiled;
+                            });
+                            const safeItems = scannedItems.filter(i => {
+                                const daysPassed = Math.floor((Date.now() - (i.timestamp || Date.now())) / (1000 * 60 * 60 * 24));
+                                const daysLeft = (i.expiryDays !== undefined ? i.expiryDays : 7) - daysPassed;
+                                return daysLeft > 5 && !i.isSpoiled;
+                            });
+
+                            const getWidth = (val: number) => `${Math.max((val / total) * 100, 0)}%`;
+
+                            const renderAllRiskItems = () => {
+                                if (riskItems.length === 0 && warningItems.length === 0) return null;
+
+                                return (
+                                    <div className="mt-4 pt-4 border-t border-white/5 space-y-2 relative z-10">
+                                        <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-2">優先處理建議 (近迫排序)</div>
+                                        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                                            {[...riskItems, ...warningItems]
+                                                .sort((a, b) => {
+                                                    const getA = (a.expiryDays !== undefined ? a.expiryDays : 7) - Math.floor((Date.now() - (a.timestamp || Date.now())) / (1000 * 60 * 60 * 24));
+                                                    const getB = (b.expiryDays !== undefined ? b.expiryDays : 7) - Math.floor((Date.now() - (b.timestamp || Date.now())) / (1000 * 60 * 60 * 24));
+                                                    return getA - getB;
+                                                })
+                                                .map(i => {
+                                                    const daysLeft = (i.expiryDays !== undefined ? i.expiryDays : 7) - Math.floor((Date.now() - (i.timestamp || Date.now())) / (1000 * 60 * 60 * 24));
+                                                    const isRisk = daysLeft <= 2;
+                                                    return (
+                                                        <div key={i.id} className={`flex-shrink-0 whitespace-nowrap px-3 py-2 rounded-xl flex items-center gap-2 border ${isRisk ? 'bg-red-500/10 border-red-500/20' : 'bg-amber-400/10 border-amber-400/20'}`}>
+                                                            <span className="text-[10px] font-black uppercase text-white">{i.name}</span>
+                                                            <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md ${isRisk ? 'bg-red-500/20 text-red-500' : 'bg-amber-400/20 text-amber-400'}`}>
+                                                                剩餘 {daysLeft} 天
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })
+                                            }
+                                        </div>
+                                    </div>
+                                );
+                            };
+
+                            return (
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between mt-2 mb-2">
+                                        <span className="text-[10px] font-black text-white uppercase tracking-widest">全庫存壽命分佈預測</span>
+                                        <span className="text-[8px] font-bold text-gray-500 uppercase">{total} ITEMS</span>
+                                    </div>
+
+                                    {/* 視覺化分佈進度條 */}
+                                    <div className="w-full h-3 bg-white/5 rounded-full overflow-hidden flex shadow-inner mb-4">
+                                        {riskItems.length > 0 && <div style={{ width: getWidth(riskItems.length) }} className="bg-red-500 transition-all duration-1000 animate-pulse border-r border-[#0f2e24]" />}
+                                        {warningItems.length > 0 && <div style={{ width: getWidth(warningItems.length) }} className="bg-amber-400 transition-all duration-1000 border-r border-[#0f2e24]" />}
+                                        {safeItems.length > 0 && <div style={{ width: getWidth(safeItems.length) }} className="bg-[#00ff88] transition-all duration-1000 border-r border-[#0f2e24]" />}
+                                        {(total - riskItems.length - warningItems.length - safeItems.length > 0) && <div style={{ width: getWidth(total - riskItems.length - warningItems.length - safeItems.length) }} className="bg-gray-600 transition-all duration-1000" />}
+                                    </div>
+
+                                    {/* 指標與建議 */}
+                                    <div className="grid grid-cols-3 gap-2 relative z-10">
+                                        <div className="bg-white/5 rounded-xl p-3 border text-left border-red-500/20 relative">
+                                            <div className="text-[8px] font-black text-gray-500 uppercase mb-1">1-2 天 (高風險)</div>
+                                            <div className="text-lg font-black text-red-500">{riskItems.length}</div>
+                                            <div className="text-[7px] text-gray-400 mt-1 whitespace-nowrap overflow-hidden text-ellipsis">{riskItems.length > 0 ? "建議立即合成" : "無近迫風險"}</div>
+                                        </div>
+                                        <div className="bg-white/5 rounded-xl p-3 border text-left border-amber-400/20 relative">
+                                            <div className="text-[8px] font-black text-gray-500 uppercase mb-1">3-5 天 (需注意)</div>
+                                            <div className="text-lg font-black text-amber-400">{warningItems.length}</div>
+                                            <div className="text-[7px] text-gray-400 mt-1 whitespace-nowrap overflow-hidden text-ellipsis">{warningItems.length > 0 ? "準備排入計畫" : "暫無疑慮"}</div>
+                                        </div>
+                                        <div className="bg-white/5 rounded-xl p-3 border text-left border-[#00ff88]/20 relative">
+                                            <div className="text-[8px] font-black text-gray-500 uppercase mb-1">&gt; 5 天 (安全)</div>
+                                            <div className="text-lg font-black text-[#00ff88]">{safeItems.length}</div>
+                                            <div className="text-[7px] text-gray-400 mt-1 whitespace-nowrap overflow-hidden text-ellipsis">庫存穩定</div>
+                                        </div>
+                                    </div>
+
+                                    {/* 展開顯示細節 */}
+                                    {renderAllRiskItems()}
+                                </div>
+                            );
+                        })()}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* 底部摘要 */}
+            <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <div className="text-center border-r border-white/10 pr-4">
+                        <div className="text-[10px] font-black text-white">{data.reduce((s, d) => s + d.amount, 0)}</div>
+                        <div className="text-[6px] font-bold text-gray-500 uppercase">本週損耗</div>
+                    </div>
+                    <div>
+                        <div className="text-[10px] font-black text-[#00ff88]">+{Math.floor(sustainabilityIndex / 10)}</div>
+                        <div className="text-[6px] font-bold text-gray-500 uppercase">惜食獎勵</div>
+                    </div>
+                </div>
+                <div className="text-[8px] font-black text-white/20 uppercase tracking-widest">Protocol: Waste_Zero.v1</div>
             </div>
         </div>
     );
@@ -428,7 +608,13 @@ export function Profile() {
                             </div>
                         </div>
                         <button
-                            onClick={() => updateSettings({ notifications: !settings.notifications })}
+                            onClick={async () => {
+                                const newSetting = !settings.notifications;
+                                if (newSetting) {
+                                    await notificationService.requestPermission();
+                                }
+                                updateSettings({ notifications: newSetting });
+                            }}
                             className={`w-12 h-6 rounded-full relative transition-all duration-300 ${settings.notifications ? "bg-[#00ff88]" : "bg-white/10"}`}
                         >
                             <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-300 ${settings.notifications ? "left-7" : "left-1"}`} />
@@ -458,8 +644,25 @@ export function Profile() {
 
 export function Saved() {
     const nav = useNavigate();
+    const { wasteHistory, scannedItems } = useIngredients();
+
     return (
-        <div className="pb-24 flex flex-col items-center justify-center px-8 py-24 text-center"><PageHeader showBackButton title="已暫存清單" /><div className="w-28 h-28 bg-white/5 rounded-[2.5rem] border border-white/10 flex items-center justify-center mb-10"><BookOpen size={48} className="text-[#00ff88]/20" /></div><h2 className="text-sm font-black text-white uppercase mb-4 opacity-50">暫無加入清單</h2><button onClick={() => nav("/")} className="bg-[#00ff88] text-[#0f2e24] px-10 py-5 rounded-2xl font-black uppercase text-[10px] shadow-lg">啟動掃描器</button></div>
+        <div className="pb-24 pt-6">
+            <PageHeader showBackButton title="數據統計" />
+            <div className="px-6 mb-8 mt-2 text-left">
+                <NeuralAnalyticsDashboard data={wasteHistory} scannedItems={scannedItems} />
+            </div>
+
+            <div className="px-6 flex flex-col items-center justify-center py-12 text-center bg-white/5 rounded-[2rem] border border-white/5 mx-6">
+                <div className="w-20 h-20 bg-[#00ff88]/5 rounded-full border border-[#00ff88]/10 flex items-center justify-center mb-6">
+                    <BookOpen size={32} className="text-[#00ff88]/20" />
+                </div>
+                <h2 className="text-[11px] font-black text-white/50 uppercase mb-5 tracking-widest">暫無儲存的食譜方案</h2>
+                <button onClick={() => nav("/")} className="bg-[#00ff88] text-[#0f2e24] px-10 py-4 rounded-xl font-black uppercase text-[11px] tracking-widest shadow-lg hover:scale-105 transition-all">
+                    啟動掃描器去發掘
+                </button>
+            </div>
+        </div>
     );
 }
 
@@ -467,6 +670,8 @@ export function RecipeDetail() {
     const { id } = useParams();
     const nav = useNavigate();
     const { recommendedRecipes, scannedItems, setRecipes } = useIngredients();
+
+    const [showSaveModal, setShowSaveModal] = useState(false);
 
     // 優先從全域推薦中找，找不到才去靜態庫 (Search context first, then static DB)
     const [recipe] = useState(() =>
@@ -510,8 +715,84 @@ export function RecipeDetail() {
                     </button>
                 </div>
 
-                <button onClick={() => nav("/")} className="w-full bg-[#00ff88] text-[#0f2e24] py-5 rounded-2xl font-black text-sm uppercase shadow-lg flex items-center justify-center gap-3 mt-4"><Sparkles size={20} />完成並存檔</button>
+                <button onClick={() => setShowSaveModal(true)} className="w-full bg-[#00ff88] text-[#0f2e24] py-5 rounded-2xl font-black text-sm uppercase shadow-lg flex items-center justify-center gap-3 mt-4 hover:scale-[1.02] active:scale-[0.98] transition-all">
+                    <BookOpen size={20} />儲存食譜
+                </button>
             </div>
+
+            <AnimatePresence>
+                {showSaveModal && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-[#0f2e24]/90 backdrop-blur-xl flex items-center justify-center p-6 pb-[15vh] sm:pb-6">
+                        <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="bg-[#1a4d3d] w-full max-w-sm max-h-[75vh] flex flex-col rounded-[2.5rem] border border-white/10 shadow-2xl relative overflow-hidden">
+
+                            <button onClick={() => setShowSaveModal(false)} className="absolute right-4 top-4 z-20 w-8 h-8 rounded-full bg-black/20 flex items-center justify-center text-gray-300 hover:text-white backdrop-blur-md transition-colors">
+                                <X size={16} />
+                            </button>
+
+                            <div className="p-6 pb-4 shrink-0 relative z-10 border-b border-white/5 bg-[#1a4d3d]">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-[#00ff88]/20 rounded-2xl flex items-center justify-center text-[#00ff88] border border-[#00ff88]/10 shadow-lg">
+                                        <BookOpen size={24} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-black text-white uppercase tracking-widest">食譜已儲存</h3>
+                                        <div className="text-[10px] font-bold tracking-widest text-[#00ff88] mt-0.5">已同步至雲端與暫存清單</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="p-6 overflow-y-auto w-full flex-1 relative z-10 space-y-4 bg-[#0f2e24]/30">
+                                <div>
+                                    <h4 className="font-black text-xl text-white tracking-widest mb-2 leading-tight flex items-start gap-2">
+                                        <ChefHat size={18} className="text-[#00ff88] mt-1 shrink-0" />
+                                        {recipe.name}
+                                    </h4>
+                                    <div className="text-[11px] text-gray-400 font-bold leading-relaxed">{recipe.description}</div>
+                                </div>
+
+                                <div className="bg-white/5 rounded-2xl p-4 border border-white/5 shadow-inner">
+                                    <div className="text-[10px] text-[#00ff88] mb-3 font-black uppercase tracking-widest flex items-center gap-2">
+                                        <ChefHat size={12} />所需食材
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {recipe.requiredIngredients.map((ing: string, idx: number) => (
+                                            <span key={idx} className="bg-black/30 border border-white/10 text-white px-3 py-1.5 rounded-xl text-[10px] font-bold">
+                                                {ing}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="bg-white/5 rounded-2xl p-4 border border-white/5 shadow-inner">
+                                    <div className="text-[10px] text-amber-400 mb-3 font-black uppercase tracking-widest flex items-center gap-2">
+                                        <BookOpen size={12} />烹飪步驟
+                                    </div>
+                                    <div className="space-y-4">
+                                        {recipe.steps ? recipe.steps.map((s: any, idx: number) => (
+                                            <div key={idx} className="flex gap-3">
+                                                <div className="w-6 h-6 rounded-full bg-amber-400/10 text-amber-400 flex items-center justify-center text-[10px] font-black shrink-0 border border-amber-400/20">
+                                                    {idx + 1}
+                                                </div>
+                                                <div>
+                                                    <div className="text-white font-black text-[11px] tracking-wider mb-1 mt-0.5">{s.title}</div>
+                                                    <div className="text-gray-400 text-[10px] leading-relaxed font-bold">{s.description}</div>
+                                                </div>
+                                            </div>
+                                        )) : <div className="text-[10px] text-gray-500 font-bold tracking-widest">無詳細步驟</div>}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="p-4 shrink-0 relative z-10 bg-[#1a4d3d] border-t border-white/5">
+                                <button onClick={() => { setShowSaveModal(false); nav("/saved"); }} className="w-full bg-[#00ff88] text-[#0f2e24] py-4 rounded-xl font-black text-[11px] uppercase tracking-widest shadow-lg hover:brightness-110 active:scale-[0.98] transition-all">
+                                    前往數據統計查看
+                                </button>
+                            </div>
+
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

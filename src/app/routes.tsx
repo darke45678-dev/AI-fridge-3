@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router";
+import { createHashRouter } from "react-router";
 import { lazy, Suspense } from "react";
 import { MainLayout } from "./components/MainLayout";
 
@@ -35,7 +35,7 @@ const PageLoader = () => (
 );
 
 // 定義應用程式的所有路徑與對應的頁面組件
-export const router = createBrowserRouter([
+export const router = createHashRouter([
   {
     path: "/",
     element: <MainLayout />,

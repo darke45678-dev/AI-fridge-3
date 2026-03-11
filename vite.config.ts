@@ -6,6 +6,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 import compression from 'vite-plugin-compression'
 
 export default defineConfig({
+  base: '/AI-fridge-3/',
   plugins: [
     // The React and Tailwind plugins are both required for Make, even if
     // Tailwind is not being actively used – do not remove them
@@ -62,7 +63,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           'react-vendor': ['react', 'react-dom', 'react-router'],
-          'ui-vendor': ['lucide-react', 'motion', 'clsx', 'tailwind-merge'],
+          'ui-vendor': ['lucide-react', 'motion'],
         },
       },
     },

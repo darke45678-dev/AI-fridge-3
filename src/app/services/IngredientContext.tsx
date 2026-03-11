@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { llmService } from "./llmService";
+import { notificationService } from "./notificationService";
 
 export interface ScannedItem {
     id: string;
@@ -49,16 +50,27 @@ export function IngredientProvider({ children }: { children: ReactNode }) {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [settings, setSettings] = useState({ notifications: true, darkMode: true });
 
-    // Mock Waste History
-    const [wasteHistory] = useState<WasteRecord[]>([
-        { date: "2024-03-04", amount: 2 },
-        { date: "2024-03-05", amount: 0 },
-        { date: "2024-03-06", amount: 3 },
-        { date: "2024-03-07", amount: 1 },
-        { date: "2024-03-08", amount: 0 },
-        { date: "2024-03-09", amount: 4 },
-        { date: "2024-03-10", amount: 1 },
-    ]);
+    // Mock 30 days of history
+    const [wasteHistory] = useState<WasteRecord[]>(() => {
+        const records: WasteRecord[] = [];
+        const today = new Date();
+        const baseAmounts = [2, 0, 3, 1, 0, 4, 1, 0, 2, 0, 0, 1, 0, 5, 2, 0, 1, 1, 0, 3, 0, 0, 1, 0, 0, 2, 0, 1, 0, 0, 1, 2];
+
+        for (let i = 29; i >= 0; i--) {
+            const d = new Date(today);
+            d.setDate(today.getDate() - i);
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+
+            // 使用一些假資料的規律，包含0、一些小浪費、偶爾較大浪費
+            records.push({
+                date: `${y}-${m}-${day}`,
+                amount: baseAmounts[i % baseAmounts.length]
+            });
+        }
+        return records;
+    });
 
     // Load from localStorage on mount
     useEffect(() => {
@@ -69,6 +81,17 @@ export function IngredientProvider({ children }: { children: ReactNode }) {
         if (savedRecipes) try { setRecommendedRecipes(JSON.parse(savedRecipes)); } catch (e) { }
         if (savedSettings) try { setSettings(JSON.parse(savedSettings)); } catch (e) { }
     }, []);
+
+    // Notification check effect
+    useEffect(() => {
+        if (settings.notifications && scannedItems.length > 0) {
+            // 延遲一點執行，避免剛載入時太突兀
+            const timer = setTimeout(() => {
+                notificationService.checkAndNotify(scannedItems, settings);
+            }, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [scannedItems, settings.notifications]);
 
     // Sync to localStorage
     useEffect(() => {
@@ -93,7 +116,7 @@ export function IngredientProvider({ children }: { children: ReactNode }) {
             timestamp: item.timestamp || now,
             category: item.category || "其他",
             storageType: item.storageType || "fridge",
-            expiryDays: item.expiryDays || 7, // Default 7 days
+            expiryDays: item.expiryDays !== undefined ? item.expiryDays : 7, // Default 7 days
             ...item
         };
 

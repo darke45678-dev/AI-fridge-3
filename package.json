@@ -3,7 +3,10 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
+  "homepage": "https://darke45678-dev.github.io/AI-fridge-3/",
   "scripts": {
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist",
     "build": "vite build",
     "dev": "vite"
   },
@@ -23,6 +26,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-basic-ssl": "^2.1.4",
     "@vitejs/plugin-react": "5.1.4",
+    "gh-pages": "^6.3.0",
     "localtunnel": "^2.0.2",
     "tailwindcss": "4.2.1",
     "vite": "7.3.1",
